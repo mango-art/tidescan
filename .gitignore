@@ -1,0 +1,9 @@
+/target/
+/build/
+/docs/
+*.log
+/data/
+/cache/
+/tmp/
+/config/
+/$null

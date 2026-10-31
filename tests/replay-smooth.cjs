@@ -1,0 +1,38 @@
+const { chromium } = require('C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+(async () => {
+  const browser = await chromium.launch({headless:true, executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe', args:['--no-proxy-server']});
+  const page = await browser.newPage();
+  const errors = [], dailyRequests = [];
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('request', r => { if (r.url().includes('/api/game/daily?') && r.url().includes('day=2025-01-03')) dailyRequests.push(r.url()); });
+  await page.request.post('http://127.0.0.1:18080/api/game/reset', {data:{password:'123456'}});
+  await page.goto('http://127.0.0.1:18080/', {waitUntil:'networkidle'});
+  await page.locator('#date').fill('2025-01-02');
+  await page.locator('#start').click();
+  await page.waitForFunction(() => document.querySelector('#clock').textContent==='15:00');
+  await page.locator('#screen').click();
+  await page.waitForSelector('#matches .stock-row');
+  await page.locator('#matches .stock-row').first().click();
+  await page.waitForFunction(() => document.querySelector('#price').textContent.includes('11.00'));
+  await page.locator('.quick-trade button[data-side="BUY"][data-fraction="0.25"]').click();
+  await page.waitForFunction(() => document.querySelector('#live-total').textContent.startsWith('¥') && document.querySelector('#live-holdings').textContent.includes('测试股票'));
+  await page.evaluate(() => {
+    window.__accountUpdates=[];
+    window.__accountObserver=new MutationObserver(() => window.__accountUpdates.push(document.querySelector('#live-total').textContent));
+    window.__accountObserver.observe(document.querySelector('#live-total'), {childList:true,characterData:true,subtree:true});
+  });
+  await page.selectOption('#speed', '500');
+  await page.locator('#play').click();
+  await page.waitForSelector('#chart .minute-new-segment', {timeout:5000});
+  const style=await page.locator('#chart .minute-new-segment').evaluate(e=>({name:getComputedStyle(e).animationName,duration:getComputedStyle(e).animationDuration}));
+  await page.locator('#play').click();
+  await page.waitForTimeout(250);
+  const accountUpdates=await page.evaluate(() => { window.__accountObserver.disconnect(); return window.__accountUpdates; });
+  if (accountUpdates.some(x=>x.includes('估值中'))) throw Error('播放中账户估值闪烁');
+  if (style.name!=='minute-segment-reveal') throw Error('新分时线段没有过渡动画');
+  if (dailyRequests.length!==1) throw Error('回放期间重复读取日线：'+dailyRequests.length);
+  if (await page.locator('#daily-chart .candle[data-day="2025-01-04"]').count()) throw Error('日K泄漏未来行情');
+  if (errors.length) throw Error(errors.join('; '));
+  console.log(JSON.stringify({accountUpdates,dailyRequests:dailyRequests.length,animation:style,errors}));
+  await browser.close();
+})().catch(e => { console.error(e); process.exitCode=1; });

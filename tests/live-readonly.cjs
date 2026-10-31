@@ -1,0 +1,8 @@
+const {chromium}=require('C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+(async()=>{
+ const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',args:['--no-proxy-server']});
+ try{const page=await browser.newPage({viewport:{width:1920,height:1080}});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:8080/',{waitUntil:'networkidle'});const state=await page.request.get('http://127.0.0.1:8080/api/game').then(r=>r.json());const screen=await page.request.get('http://127.0.0.1:8080/api/screen').then(r=>r.json());
+ if(state.active&&(state.positions.length||state.orders.some(o=>o.status==='FILLED'))){await page.waitForFunction(()=>document.querySelector('#live-total').textContent.startsWith('¥'),null,{timeout:30000});await page.waitForSelector('#daily-chart .buy-marker',{timeout:30000});await page.locator('#replay-view').click();await page.waitForSelector('#chart .replay-crosshair',{timeout:30000});await page.waitForSelector('#daily-chart .candle[data-day="'+state.day+'"]',{timeout:30000});}
+ console.log(JSON.stringify({active:state.active,positions:state.positions.length,screenCount:screen.matches.length,buyMarkers:await page.locator('#daily-chart .buy-marker').count(),sellMarkers:await page.locator('#chart .sell-marker').count(),crosshair:await page.locator('#chart .replay-crosshair').count(),errors}));if(errors.length)process.exitCode=1;
+ }finally{await browser.close()}
+})().catch(e=>{console.error(e.message);process.exitCode=1});
